@@ -1,2 +1,0 @@
-PLACE paramotor render image here as paramotor.jpg
-PLACE canopy/glider render image here as glider.jpg

@@ -102,6 +102,23 @@ The custom firmware mixer in `~/ardupilot/ArduPlane/servos.cpp`:
 ## Quick Start
 
 ```bash
+# One-time setup (auto-installs Gazebo, ArduPilot, deps for macOS/Linux)
+git clone https://github.com/sanjubhai-oto/PARAGLIDER-RTG.git
+cd PARAGLIDER-RTG
+./setup.sh
+
+# Launch full stack
+./launch.sh
+
+# Stop everything
+./kill.sh
+```
+
+Detailed install in [docs/SETUP.md](docs/SETUP.md).
+
+## Manual Launch
+
+```bash
 # 1. Kill stale processes + free ports
 ps aux | grep -E "gz sim|paraglider_bridge|arduplane|sim_vehicle|mav_forw" | grep -v grep | awk '{print $2}' | xargs -I{} kill -9 {}
 for port in 14550 14551 14552 5760 9002; do
@@ -137,6 +154,7 @@ Full launch in [docs/LAUNCH.md](docs/LAUNCH.md).
 
 | File | Topic |
 |------|-------|
+| [docs/SETUP.md](docs/SETUP.md) | Full cross-platform setup guide |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Stack diagram, data flow, port assignments |
 | [docs/PHYSICS.md](docs/PHYSICS.md) | `model.sdf` params, mass/inertia, joints |
 | [docs/FIRMWARE.md](docs/FIRMWARE.md) | Custom ArduPlane mixer in `servos.cpp` |

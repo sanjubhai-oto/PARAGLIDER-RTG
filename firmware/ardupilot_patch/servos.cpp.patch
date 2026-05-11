@@ -1,0 +1,129 @@
+diff --git a/ArduPlane/servos.cpp b/ArduPlane/servos.cpp
+index 0bf95671bb..d7765405b8 100644
+--- a/ArduPlane/servos.cpp
++++ b/ArduPlane/servos.cpp
+@@ -958,6 +958,124 @@ void Plane::set_servos(void)
+     }
+ #endif  // AP_ICENGINE_ENABLED
+ 
++    // ====================================================================
++    // ArduParaglider arm-control mixer
++    // ====================================================================
++    // Builds on ArduPlane infrastructure (all modes, EKF, missions, MAVLink
++    // commands, params). Replaces aileron/elevator surface output with two
++    // paraglider arm servos.
++    //
++    // Physical model:
++    //   - Throttle drives a pusher prop. Forward thrust + canopy aero pitches
++    //     the vehicle up and climbs at glide angle (NOT vertical takeoff).
++    //   - Pulling an arm (left or right) decreases lift / increases drag on
++    //     that side of the canopy, producing aerodynamic moments.
++    //
++    // Mixing:
++    //   ail   = AP roll  demand  (-1..+1)
++    //   elev  = AP pitch demand  (-1..+1, +ve = nose up)
++    //   pitch nose-DOWN demand  -> both arms pull
++    //   pitch neutral / nose-UP -> arms released (canopy lifts naturally)
++    //   roll demand             -> differential arm pull
++    //
++    //   arm_common = max(0, -elev)
++    //   arm_left   = clamp(arm_common + ail, 0, ARM_MAX)
++    //   arm_right  = clamp(arm_common - ail, 0, ARM_MAX)
++    //
++    // Output channels:
++    //   SERVO5_FUNCTION = 24 (k_flaperon_left)  -> left arm servo
++    //   SERVO6_FUNCTION = 25 (k_flaperon_right) -> right arm servo
++    // (Using existing SRV_Channel function IDs to avoid touching enum.)
++    {
++        // Arms driven by RAW RC INPUT (not AP attitude controller output).
++        // Spec: arms move only when user moves RC stick. AP autonomous corrections
++        // do NOT touch arms. Throttle still gated by armed state (AP handles).
++        float ail = 0.0f, elev = 0.0f;
++        constexpr float ARM_MAX = 0.85f;
++        if (arming.is_armed_and_safety_off() && !failsafe.rc_failsafe) {
++            RC_Channel *rc1 = rc().channel(0);   // roll/aileron
++            RC_Channel *rc2 = rc().channel(1);   // pitch/elevator
++            if (rc1 != nullptr) ail  = -rc1->norm_input();  // INVERTED for QGC virtual joystick convention
++            if (rc2 != nullptr) elev = -rc2->norm_input();  // INVERTED: stick FORWARD (elev_norm>0 after invert) -> arms pull
++            constexpr float DEADBAND = 0.05f;
++            if (ail  > -DEADBAND && ail  < DEADBAND) ail  = 0.0f;
++            if (elev > -DEADBAND && elev < DEADBAND) elev = 0.0f;
++            // Saturation fix: clamp elev to ARM_MAX so roll authority is preserved at full pitch.
++            if (elev > ARM_MAX) elev = ARM_MAX;
++            // RC failsafe canopy release (defensive — outer gate already excludes failsafe).
++            if (failsafe.rc_failsafe) { ail = 0; elev = 0; }
++            // pitch FORWARD (after inversion: elev>0) -> both arms pull. pitch back -> idle.
++            const float arm_common = (elev > 0.0f) ? elev : 0.0f;
++            // Roll: stick RIGHT (after inversion: ail>0) -> right arm pulls
++            float arm_left  = arm_common - ail;
++            float arm_right = arm_common + ail;
++            if (arm_left  < 0.0f) arm_left  = 0.0f;
++            if (arm_right < 0.0f) arm_right = 0.0f;
++            if (arm_left  > ARM_MAX) arm_left  = ARM_MAX;
++            if (arm_right > ARM_MAX) arm_right = ARM_MAX;
++
++            // ---- Automatic pitch damper ------------------------------------
++            // Paraglider open-loop pilot input has no inherent pitch stability:
++            // canopy tends to either stall (no climb) or rocket (vertical
++            // runaway). Apply automatic symmetric brake (both arms) when nose
++            // pitches up past PITCH_MAX_DEG to flare and bleed climb rate.
++            // When diving past PITCH_MIN_DEG, force arms released so canopy
++            // can recover airspeed. Damper only AUGMENTS pilot pull (max), it
++            // never reduces a deliberate pilot brake input.
++            {
++                const float pitch_deg = degrees(ahrs.get_pitch());
++                constexpr float PITCH_MAX_DEG = 20.0f;
++                constexpr float PITCH_MIN_DEG = -10.0f;
++                constexpr float PITCH_RANGE_DEG = 20.0f; // overshoot span -> 0..1
++                if (pitch_deg > PITCH_MAX_DEG) {
++                    float damper = (pitch_deg - PITCH_MAX_DEG) / PITCH_RANGE_DEG;
++                    if (damper > 1.0f) damper = 1.0f;
++                    const float damper_pull = damper * ARM_MAX;
++                    if (damper_pull > arm_left)  arm_left  = damper_pull;
++                    if (damper_pull > arm_right) arm_right = damper_pull;
++                } else if (pitch_deg < PITCH_MIN_DEG) {
++                    // Diving: force release so canopy can re-pressurize and
++                    // pilot pull cannot deepen the dive.
++                    arm_left  = 0.0f;
++                    arm_right = 0.0f;
++                }
++            }
++            // ----------------------------------------------------------------
++
++            SRV_Channels::set_output_scaled(SRV_Channel::k_flaperon_left,  arm_left  * 4500.0f);
++            SRV_Channels::set_output_scaled(SRV_Channel::k_flaperon_right, arm_right * 4500.0f);
++
++            // ---- Pitch-UP assist (climb command via SERVO7) ----------------
++            // Stick BACK on RC2 (after firmware invert: elev < 0) -> SERVO7 high.
++            // Bridge reads SERVO7 PWM and applies extra +Z (up) wrench force.
++            // Maps elev -1..0 -> SERVO7 PWM 2000..1500. SERVO7_FUNCTION must = 94 (k_scripting1).
++            float pitch_up_norm = 0.0f;
++            if (elev < 0.0f) pitch_up_norm = -elev;
++            if (pitch_up_norm > 1.0f) pitch_up_norm = 1.0f;
++            SRV_Channels::set_output_scaled(SRV_Channel::k_scripting1, pitch_up_norm * 4500.0f);
++            // ----------------------------------------------------------------
++        } else {
++            // Disarmed or RC failsafe: park arms released (0) so canopy flies free.
++            SRV_Channels::set_output_scaled(SRV_Channel::k_flaperon_left,  0);
++            SRV_Channels::set_output_scaled(SRV_Channel::k_flaperon_right, 0);
++            SRV_Channels::set_output_scaled(SRV_Channel::k_scripting1,    0);
++        }
++    }
++
++    // Paraglider throttle: ALWAYS pass pilot RC3 directly to motor, in ALL modes.
++    // ArduPlane normally auto-throttles in LOITER/AUTO/RTL via TECS — pilot stick is
++    // ignored. User wants RC3 stick to drive motor in any mode (per paraglider spec).
++    // Throttle gated by armed state AND RC failsafe (cuts motor on RC loss).
++    if (arming.is_armed_and_safety_off() && !failsafe.rc_failsafe) {
++        RC_Channel *rc3 = rc().channel(2);
++        if (rc3 != nullptr) {
++            float thr = rc3->norm_input();   // -1..+1 with center at 0
++            if (thr < 0.0f) thr = 0.0f;      // clamp negative half to 0
++            if (thr > 1.0f) thr = 1.0f;
++            SRV_Channels::set_output_scaled(SRV_Channel::k_throttle, thr * 100.0f);
++        }
++    }
++
+     // run output mixer and send values to the hal for output
+     servos_output();
+ }

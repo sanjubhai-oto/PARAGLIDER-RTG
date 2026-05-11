@@ -1,0 +1,60 @@
+<?xml version="1.0" ?>
+<sdf version="1.10">
+  <world name="paraglider_world">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.002</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics">
+      <engine><filename>gz-physics-dartsim-plugin</filename></engine>
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+    <!-- Bounded thrust: bridge publishes EntityWrench on /world/paraglider_world/wrench -->
+    <plugin filename="gz-sim-apply-link-wrench-system" name="gz::sim::systems::ApplyLinkWrench"/>
+
+
+    <scene><ambient>0.4 0.4 0.4 1</ambient><background>0.6 0.7 0.9 1</background><sky/></scene>
+
+    <light type="directional" name="sun">
+      <pose>0 0 50 0 0 0</pose>
+      <diffuse>1 1 1 1</diffuse><specular>0.5 0.5 0.5 1</specular>
+      <direction>-0.3 -0.3 -1</direction>
+    </light>
+
+    <!-- Ground as thick box (Bullet Featherstone has unstable contact with infinite plane).
+         Top surface at z=0; box centered at z=-0.5 with thickness 1m. -->
+    <model name="ground">
+      <static>true</static>
+      <pose>0 0 -0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>1000 1000 1.0</size></box></geometry>
+          <surface>
+            <friction><ode><mu>0.1</mu><mu2>0.1</mu2></ode></friction>   <!-- ice-like, low resistance -->
+
+            <bounce><restitution_coefficient>0</restitution_coefficient></bounce>
+            <contact><ode><kp>1e8</kp><kd>10</kd></ode></contact>
+          </surface>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>1000 1000 1.0</size></box></geometry>
+          <material><diffuse>0.4 0.6 0.3 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Wind disabled for ground tests; aero remains zero at zero airspeed -->
+    <wind><linear_velocity>0 0 0</linear_velocity></wind>
+
+    <include>
+      <uri>model://paraglider_uav</uri>
+      <pose>0 0 0.15 0 0 0</pose>   <!-- normal: spawn ON ground; bridge handles axis remap -->
+    </include>
+  </world>
+</sdf>

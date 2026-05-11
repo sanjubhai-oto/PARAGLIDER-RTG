@@ -1,0 +1,24 @@
+# Backup files
+sdf/*.bak*
+sdf/world.sdf.bak*
+**/*.bak
+
+# Build artifacts
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+/tmp/*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Local-only meshes / installed models
+.gz/
+.claude-flow/

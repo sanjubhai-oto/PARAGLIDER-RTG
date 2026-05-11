@@ -1,0 +1,257 @@
+<?xml version="1.0" ?>
+<sdf version="1.10">
+  <model name="paraglider_uav">
+
+    <!-- All meshes exported from assembly.step keeping assembly world coords.
+         Scale 0.001 (mm->m). Each link pose=(0,0,0); collision boxes placed to match mesh centers. -->
+
+    <link name="fuselage">
+      <pose>0 0 0 0 0 0</pose>
+      <velocity_decay><linear>0.0</linear><angular>0.5</angular></velocity_decay>
+      <inertial>
+        <pose>0.050 0.056 0.010 0 0 0</pose>
+        <mass>0.20</mass>
+        <inertia><ixx>0.10</ixx><iyy>0.10</iyy><izz>0.10</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="vis">
+        <geometry><mesh><uri>model://paraglider_uav/meshes/fuselage_asm.stl</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
+        <material><diffuse>0.8 0.7 0.4 1</diffuse></material>
+      </visual>
+      <collision name="col">
+        <pose>0.050 0.0585 0.035 0 0 0</pose>
+        <geometry><box><size>0.273 0.183 0.273</size></box></geometry>
+        <surface>
+          <friction><ode><mu>0.1</mu><mu2>0.1</mu2></ode></friction>
+          <bounce><restitution_coefficient>0</restitution_coefficient></bounce>
+        </surface>
+      </collision>
+      <sensor name="imu_sensor" type="imu">
+        <always_on>1</always_on>
+        <update_rate>250</update_rate>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+    </link>
+
+    <!-- arm_left: pivot at servo location ~(-2, 37, 0)mm in assembly. Mesh CoM rel = (-34, 0, 49)mm -->
+    <link name="arm_left">
+      <pose>-0.002 0.037 0 0 0 0</pose>
+      <inertial>
+        <pose>-0.034 0 0.049 0 0 0</pose>
+        <mass>0.03</mass>
+        <inertia><ixx>3e-5</ixx><iyy>3e-5</iyy><izz>3e-5</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="vis">
+        <pose>0.002 -0.037 0 0 0 0</pose>
+        <geometry><mesh><uri>model://paraglider_uav/meshes/arm_left_asm.stl</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
+      </visual>
+      <collision name="col">
+        <pose>-0.034 0 0.049 0 0 0</pose>
+        <geometry><box><size>0.068 0.011 0.123</size></box></geometry>
+      </collision>
+    </link>
+
+    <!-- arm_right: pivot at servo location ~(102, 37, 0)mm in assembly. Mesh CoM rel = (36, 0, 48)mm -->
+    <link name="arm_right">
+      <pose>0.102 0.037 0 0 0 0</pose>
+      <inertial>
+        <pose>0.036 0 0.048 0 0 0</pose>
+        <mass>0.03</mass>
+        <inertia><ixx>3e-5</ixx><iyy>3e-5</iyy><izz>3e-5</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="vis">
+        <pose>-0.102 -0.037 0 0 0 0</pose>
+        <geometry><mesh><uri>model://paraglider_uav/meshes/arm_right_asm.stl</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
+      </visual>
+      <collision name="col">
+        <pose>0.036 0 0.048 0 0 0</pose>
+        <geometry><box><size>0.073 0.011 0.121</size></box></geometry>
+      </collision>
+    </link>
+
+    <!-- Propeller link: origin AT TRUE FUSELAGE CAGE CENTER (computed from mesh bbox of cage
+         zone Y>130mm in fuselage_asm.stl): cage center = (50, 139.73, 35) mm = (0.050, 0.13973, 0.035) m.
+         Prop mesh natural hub position = (73.5, 139.8, 30.5) mm. Visual pose = link_pose - mesh_hub
+         shifts mesh so prop hub renders AT cage center.
+         Joint axis Y through link origin (= cage center) -> spins in place. -->
+    <link name="propeller">
+      <pose>0.050 0.13973 0.035 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.10</mass>
+        <inertia><ixx>1e-4</ixx><iyy>1e-4</iyy><izz>2e-4</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="vis">
+        <!-- shift mesh: link world (0.050, 0.13973, 0.035) - mesh hub (0.0735, 0.1398, 0.0305)
+                       = (-0.0235, -0.00007, +0.0045). Negate to put mesh hub on link origin. -->
+        <pose>-0.0735 -0.1398 -0.0305 0 0 0</pose>
+        <geometry><mesh><uri>model://paraglider_uav/meshes/propeller_asm.stl</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
+        <material><diffuse>0.1 0.1 0.1 1</diffuse></material>
+      </visual>
+      <!-- Cylinder default axis = Z; rotate 90deg around X so cylinder axis aligns with prop spin axis Y -->
+      <collision name="col">
+        <pose>0 0 0 1.5708 0 0</pose>
+        <geometry><cylinder><radius>0.10</radius><length>0.02</length></cylinder></geometry>
+      </collision>
+    </link>
+
+    <link name="canopy">
+      <pose>0 0 0 0 0 0</pose>
+      <gravity>false</gravity>
+      <inertial>
+        <!-- Negligible mass at body level: canopy as visual only, no inertia coupling -->
+        <pose>0.076 0.131 0.100 0 0 0</pose>
+        <mass>0.02</mass>
+        <inertia><ixx>0.001</ixx><iyy>0.001</iyy><izz>0.001</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="vis">
+        <geometry><mesh><uri>model://paraglider_uav/meshes/canopy_asm.stl</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
+        <material><diffuse>0.9 0.05 0.05 1</diffuse></material>
+      </visual>
+    </link>
+
+    <!-- Joints. Prop spins around Y axis (assembly forward/back).
+         Forward direction in assembly = -Y (arms forward at Y=37, prop back at Y=140). -->
+    <!-- Arm joints: pull-only (0=released, +0.6 rad=full pull). Effort+damping tuned. -->
+    <!-- Left arm axis (0,-1,0): pull command rotates arm tip from +Z (up) toward DOWN. -->
+    <joint name="arm_left_joint" type="revolute">
+      <parent>fuselage</parent><child>arm_left</child>
+      <axis><xyz>0 -1 0</xyz>
+        <limit><lower>0</lower><upper>0.6</upper><effort>10</effort><velocity>3</velocity></limit>
+        <dynamics><damping>1.0</damping></dynamics>
+      </axis>
+    </joint>
+
+    <!-- Right arm axis (0,1,0): pull rotates tip from +Z toward DOWN (verified by tip math).
+         Mirror axis vs left arm because tip CoM offset has opposite X sign. -->
+    <joint name="arm_right_joint" type="revolute">
+      <parent>fuselage</parent><child>arm_right</child>
+      <axis><xyz>0 1 0</xyz>
+        <limit><lower>0</lower><upper>0.6</upper><effort>10</effort><velocity>3</velocity></limit>
+        <dynamics><damping>1.0</damping></dynamics>
+      </axis>
+    </joint>
+
+    <!-- Prop joint axis (0,1,0): plugin applies force OPPOSITE axis (-axis convention) on prop.
+         Air pushed +Y (out the back of cage), reaction pushes vehicle -Y (FORWARD). -->
+    <joint name="propeller_joint" type="revolute">
+      <parent>fuselage</parent><child>propeller</child>
+      <axis><xyz>0 1 0</xyz>
+        <dynamics><damping>0.005</damping></dynamics>
+      </axis>
+    </joint>
+
+    <!-- Riser: FIXED joint — canopy is purely visual while bridge applies forces directly to fuselage. -->
+    <joint name="riser_joint" type="fixed">
+      <parent>fuselage</parent><child>canopy</child>
+    </joint>
+
+    <!-- Aerodynamics: LiftDrag panels DISABLED. Bridge applies explicit forces+torques. -->
+    <!--
+    <!-- DISABLED <plugin filename="gz-sim-lift-drag-system" name="gz::sim::systems::LiftDrag">
+      <a0>0.10</a0><cla>4.5</cla><cda>0.16</cda><cma>-0.5</cma>
+      <alpha_stall>0.25</alpha_stall><cla_stall>-3.0</cla_stall>
+      <cda_stall>0.5</cda_stall><cma_stall>0.0</cma_stall>
+      <area>0.36</area><air_density>1.225</air_density>
+      <forward>0 -1 0</forward><upward>0 0 1</upward>
+      <link_name>canopy</link_name>
+      <cp>-0.820 0.131 0.100</cp>
+    </plugin> -->
+    <!-- DISABLED <plugin filename="gz-sim-lift-drag-system" name="gz::sim::systems::LiftDrag">
+      <a0>0.10</a0><cla>4.5</cla><cda>0.16</cda><cma>-0.5</cma>
+      <alpha_stall>0.25</alpha_stall><cla_stall>-3.0</cla_stall>
+      <cda_stall>0.5</cda_stall><cma_stall>0.0</cma_stall>
+      <area>0.36</area><air_density>1.225</air_density>
+      <forward>0 -1 0</forward><upward>0 0 1</upward>
+      <link_name>canopy</link_name>
+      <cp>-0.372 0.131 0.100</cp>
+      <control_joint_name>arm_left_joint</control_joint_name>
+      <control_joint_rad_to_cl>-2.0</control_joint_rad_to_cl>
+    </plugin> -->
+    <!-- DISABLED <plugin filename="gz-sim-lift-drag-system" name="gz::sim::systems::LiftDrag">
+      <a0>0.10</a0><cla>4.5</cla><cda>0.16</cda><cma>-0.5</cma>
+      <alpha_stall>0.25</alpha_stall><cla_stall>-3.0</cla_stall>
+      <cda_stall>0.5</cda_stall><cma_stall>0.0</cma_stall>
+      <area>0.36</area><air_density>1.225</air_density>
+      <forward>0 -1 0</forward><upward>0 0 1</upward>
+      <link_name>canopy</link_name>
+      <cp>0.076 0.131 0.100</cp>
+    </plugin> -->
+    <!-- DISABLED <plugin filename="gz-sim-lift-drag-system" name="gz::sim::systems::LiftDrag">
+      <a0>0.10</a0><cla>4.5</cla><cda>0.16</cda><cma>-0.5</cma>
+      <alpha_stall>0.25</alpha_stall><cla_stall>-3.0</cla_stall>
+      <cda_stall>0.5</cda_stall><cma_stall>0.0</cma_stall>
+      <area>0.36</area><air_density>1.225</air_density>
+      <forward>0 -1 0</forward><upward>0 0 1</upward>
+      <link_name>canopy</link_name>
+      <cp>0.524 0.131 0.100</cp>
+      <control_joint_name>arm_right_joint</control_joint_name>
+      <control_joint_rad_to_cl>-2.0</control_joint_rad_to_cl>
+    </plugin> -->
+    <!-- DISABLED <plugin filename="gz-sim-lift-drag-system" name="gz::sim::systems::LiftDrag">
+      <a0>0.10</a0><cla>4.5</cla><cda>0.16</cda><cma>-0.5</cma>
+      <alpha_stall>0.25</alpha_stall><cla_stall>-3.0</cla_stall>
+      <cda_stall>0.5</cda_stall><cma_stall>0.0</cma_stall>
+      <area>0.36</area><air_density>1.225</air_density>
+      <forward>0 -1 0</forward><upward>0 0 1</upward>
+      <link_name>canopy</link_name>
+      <cp>0.972 0.131 0.100</cp>
+    </plugin> -->
+    -->
+
+    <!-- MulticopterMotorModel REMOVED: thrust = motorConstant * omega^2 was unbounded
+         and impossible to tune (tiny motorConstant -> 100x trajectory diff).
+         Replaced with bounded EntityWrench from paraglider_bridge.py:
+           force_body_y = throttle_pct * THRUST_FWD_MAX  (linear, capped).
+         See world.sdf ApplyLinkWrench plugin. -->
+    <!-- Motor plugin RE-ENABLED with motorConstant=0 — provides VISUAL prop spin only,
+         no force (force comes from ApplyLinkWrench in bridge). Bridge still publishes
+         /paraglider_uav/command/motor_speed with rpm = throttle*MAX_RPM, plugin spins
+         the joint accordingly. With motorConstant=0, no thrust force is generated. -->
+    <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+      <robotNamespace>paraglider_uav</robotNamespace>
+      <jointName>propeller_joint</jointName>
+      <linkName>propeller</linkName>
+      <turningDirection>cw</turningDirection>
+      <timeConstantUp>0.05</timeConstantUp>
+      <timeConstantDown>0.05</timeConstantDown>
+      <maxRotVelocity>1500</maxRotVelocity>
+      <motorConstant>0.0</motorConstant>
+      <momentConstant>0.0</momentConstant>
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <motorNumber>0</motorNumber>
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <motorSpeedPubTopic>motor_speed/0</motorSpeedPubTopic>
+      <rotorVelocitySlowdownSim>1</rotorVelocitySlowdownSim>
+    </plugin>
+
+
+    <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
+      <joint_name>arm_left_joint</joint_name>
+      <p_gain>5</p_gain><i_gain>0</i_gain><d_gain>0.5</d_gain>
+      <topic>arm/left</topic>
+    </plugin>
+    <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
+      <joint_name>arm_right_joint</joint_name>
+      <p_gain>5</p_gain><i_gain>0</i_gain><d_gain>0.5</d_gain>
+      <topic>arm/right</topic>
+    </plugin>
+
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+    <plugin filename="gz-sim-navsat-system" name="gz::sim::systems::NavSat"/>
+
+  </model>
+</sdf>

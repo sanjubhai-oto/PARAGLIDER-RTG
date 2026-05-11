@@ -1,0 +1,175 @@
+# ArduPlane params for RC paramotor / paraglider UAV
+# Vehicle: 1.0 kg, single pusher prop (3 kgf max thrust), 2 brake servos, ~1.5m canopy
+#
+# Architecture follows PX4 Paramotor Project #2 lessons (Brett Fiedler, 2023):
+#   - Pitch loop DISABLED  -> paraglider has pendular longitudinal stability,
+#                              active pitch control fights pendulum, induces oscillation.
+#   - Roll = FF dominant   -> servo response too slow for P/I terms.
+#   - TECS handles altitude via throttle (slow climb rate).
+#   - Asymmetric brake = roll = turn (proverse: yaw+roll same direction).
+#   - Symmetric brake = NOT used in normal flight (only landing flare; ignored here).
+#
+# Bridge mapping (paraglider_bridge.py):
+#   PWM ch1 (aileron/roll) -> differential brake
+#       brake_left  = trim + 0.5 * (aileron - 1500)/200   clamped 0..0.5 rad
+#       brake_right = trim - 0.5 * (aileron - 1500)/200   clamped 0..0.5 rad
+#   PWM ch3 (throttle) -> motor RPM (0..1500)
+#   PWM ch2 (elevator) IGNORED.
+#
+# Sources:
+#   https://discuss.px4.io/t/px4-paramotor-project-2-first-autonomous-mission-rtl-altitude-stabilized-flight/31125
+#   https://discuss.px4.io/t/paramotor-tecs-oscillation-tuning/37880
+#   Snowflake/JPADS literature: brake-only steering, FF roll, energy management altitude.
+
+# =====================================================================
+# FRAME
+# =====================================================================
+FRAME_TYPE       0      # plane (no Q-quadplane)
+
+# =====================================================================
+# AIRSPEED -- no real sensor; use synthetic from GPS+wind estimate
+# =====================================================================
+ARSPD_USE        0
+ARSPD_TYPE       0
+TRIM_ARSPD_CM    500    # 5.0 m/s cruise (matches PX4 Project #2)
+ARSPD_FBW_MIN    3.5
+ARSPD_FBW_MAX    8.0
+
+# =====================================================================
+# THROTTLE / TECS
+# =====================================================================
+TRIM_THROTTLE    40     # 40% trim (PX4 #2 found this for steady level)
+THR_MAX          100
+THR_MIN          0
+TECS_CLMB_MAX    1.0    # 1 m/s max climb (paramotor is slow)
+TECS_SINK_MIN    0.5
+TECS_SINK_MAX    2.0
+TECS_PTCH_DAMP   0      # no pitch damping (no pitch authority)
+TECS_THR_DAMP    0.7    # high throttle damping for smooth response
+TECS_TIME_CONST  10     # slow energy response (paraglider is slow)
+TECS_INTEG_GAIN  0.05
+
+# =====================================================================
+# PITCH LOOP -- direct wrench control mode (override realistic paraglider)
+# =====================================================================
+PTCH_RATE_P      0.30
+PTCH_RATE_I      0.10
+PTCH_RATE_D      0.02
+PTCH_RATE_FF     0.20
+LIM_PITCH_MAX    1500
+LIM_PITCH_MIN   -2500
+STAB_PITCH_DOWN  0
+
+# =====================================================================
+# ROLL LOOP -- direct wrench control mode
+# =====================================================================
+RLL_RATE_P       0.30
+RLL_RATE_I       0.10
+RLL_RATE_D       0.02
+RLL_RATE_FF      0.20
+LIM_ROLL_CD      4500    # ±45°
+
+# =====================================================================
+# YAW LOOP
+# =====================================================================
+YAW_RATE_P       0.20
+YAW_RATE_I       0.05
+YAW_RATE_D       0.00
+YAW_RATE_FF      0.10
+
+# =====================================================================
+# L1 path-follow (slow vehicle => long L1 distance)
+# =====================================================================
+NAVL1_PERIOD     22
+NAVL1_DAMPING    0.85
+
+# =====================================================================
+# IMU FILTERING -- vibration mitigation (PX4 #2 had 2.5 Hz issue)
+# =====================================================================
+INS_GYRO_FILTER  15
+INS_ACCEL_FILTER 15
+
+# =====================================================================
+# SERVO MAPPING — uses native ArduPlane firmware paraglider mixer
+#   Custom mixer in ArduPlane/servos.cpp writes flaperon_left/right with
+#   brake values computed from aileron + elevator demand.
+# =====================================================================
+SERVO1_FUNCTION  4      # Aileron  (firmware mixer reads this)
+SERVO2_FUNCTION  19     # Elevator (firmware mixer reads this)
+SERVO3_FUNCTION  70     # Throttle -> motor RPM (bridge passthrough)
+SERVO4_FUNCTION  0      # Disabled
+SERVO5_FUNCTION  24     # K_FLAPERON_LEFT  -> left brake (paraglider mixer driven)
+SERVO6_FUNCTION  25     # K_FLAPERON_RIGHT -> right brake (paraglider mixer driven)
+SERVO1_MIN       1100
+SERVO1_MAX       1900
+SERVO1_TRIM      1500
+SERVO3_MIN       1000
+SERVO3_MAX       2000
+SERVO3_TRIM      1000
+SERVO5_MIN       1000
+SERVO5_MAX       2000
+SERVO5_TRIM      1000
+SERVO6_MIN       1000
+SERVO6_MAX       2000
+SERVO6_TRIM      1000
+
+# Lua scripting disabled — using native firmware mixer instead
+SCR_ENABLE       0
+
+# =====================================================================
+# RC INPUT
+# =====================================================================
+RC1_MIN          1100
+RC1_MAX          1900
+RC1_TRIM         1500
+RC2_MIN          1100
+RC2_MAX          1900
+RC2_TRIM         1500
+RC3_MIN          1000
+RC3_MAX          2000
+RC3_TRIM         1500     # SITL default RC3=1500 (mid stick) → 0% throttle. Push UP from mid for thrust.
+RC4_MIN          1100
+RC4_MAX          1900
+RC4_TRIM         1500
+
+# =====================================================================
+# FLIGHT MODES (mode switch RC channel set by FLTMODE_CH)
+# All slots default to MANUAL/STABILIZE — never RTL or AUTO at boot.
+# Plane mode numbers: 0=MANUAL 2=STABILIZE 5=FBWA 6=FBWB 10=AUTO 11=RTL 12=LOITER
+# =====================================================================
+FLTMODE1         0      # MANUAL
+FLTMODE2         0      # MANUAL
+FLTMODE3         2      # STABILIZE
+FLTMODE4         5      # FBWA
+FLTMODE5         6      # FBWB
+FLTMODE6         12     # LOITER
+
+# =====================================================================
+# ARMING (require explicit user arm; relaxed checks for SITL)
+# =====================================================================
+ARMING_CHECK     0       # skip pre-arm checks (SITL only; never on real HW)
+ARMING_RUDDER    0       # do not auto-arm via rudder stick
+ARMING_REQUIRE   1       # explicit arm required (no auto-arm)
+LAND_DISARMDELAY 0
+FS_LONG_ACTN     0       # no failsafe-triggered RTL
+FS_SHORT_ACTN    0
+FLTMODE_CH       8       # mode switch on RC8 (avoid RC1-4 stick conflict)
+
+# =====================================================================
+# RTL / FAILSAFE
+# =====================================================================
+RTL_ALTITUDE     5000   # 50 m
+RTL_AUTOLAND     0
+FS_LONG_ACTN     1      # RTL on long-loss
+FS_SHORT_ACTN    0
+
+# =====================================================================
+# AUTOTUNE off (manual tune for paraglider)
+# =====================================================================
+TRIM_AUTO        0
+
+# Paraglider pitch-up assist (k_scripting1, bridge reads pwm[6] for upward wrench)
+SERVO7_FUNCTION  94
+SERVO7_MIN       1000
+SERVO7_MAX       2000
+SERVO7_TRIM      1000

@@ -1,0 +1,45 @@
+# =====================================================================
+# MetroAir Hexa + Pusher  -  full config for the pusher-compensated firmware
+# Board: MicoAir743v2   Firmware: ArduCopter 4.6.x + pusher_ff patch
+# Load: Mission Planner -> Config -> Full Parameter List -> Load from file
+# =====================================================================
+
+# ---- Frame (confirm; these are correct in the logs) ----
+FRAME_CLASS,2          # Hexa
+FRAME_TYPE,1           # X
+SERVO7_FUNCTION,58     # RCIN8 passthrough -> pusher ESC (independent forward thrust)
+
+# ---- Get the flight-mode switch OFF the pusher channel ----
+# Plug a real 3-position mode switch into RC7. Pusher stays on RC8.
+FLTMODE_CH,7
+FLTMODE1,2             # RC7 low    -> ALT_HOLD  (use for forward pusher flight)
+FLTMODE2,5             # RC7 middle -> LOITER
+FLTMODE3,0             # RC7 high   -> STABILIZE (manual fallback)
+FLTMODE4,2
+FLTMODE5,5
+FLTMODE6,0
+
+# ---- Failsafes (were OFF in the crash logs) ----
+BATT_FS_LOW_ACT,2      # low voltage  -> RTL
+BATT_FS_CRT_ACT,1      # crit voltage -> LAND
+RC4_TRIM,1517          # yaw trim fixed earlier
+
+# ---- Extra pitch authority (helps the loop resist the pusher moment) ----
+ATC_RAT_PIT_FF,0.08
+ATC_RAT_PIT_P,0.115
+ATC_RAT_PIT_I,0.115
+
+# =====================================================================
+# PUSHER TORQUE FEED-FORWARD  (new firmware feature)
+# Start with EVERYTHING AT ZERO. Flight must be identical to stock first.
+# Then calibrate per firmware/copter_pusher/README.md (Section: Calibration).
+# =====================================================================
+ATC_PUSH_EN,0          # <- leave 0 for the first flight; set 1 only when calibrating
+ATC_PUSH_RC,8          # pusher is on RC8
+ATC_PUSH_PIT,0.0       # pitch FF gain  (the term that stops the nose-down dive)
+ATC_PUSH_RLL,0.0       # roll  FF gain  (cancels pusher reaction torque)
+ATC_PUSH_YAW,0.0       # yaw   FF gain  (cancels Y-offset yaw moment)
+
+# SAFETY: until ATC_PUSH_PIT is calibrated, do NOT run the pusher above ~50%.
+# The mechanical fix (EDF thrust line through the CG height) is still the
+# primary solution; the feed-forward is a backstop for residual offset.

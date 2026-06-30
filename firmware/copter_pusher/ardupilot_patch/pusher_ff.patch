@@ -1,0 +1,108 @@
+diff --git a/libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.h b/libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.h
+index 1111111..2222222 100644
+--- a/libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.h
++++ b/libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.h
+@@ -- Member variables (add near the other AP_Param members, e.g. after _thr_mix_man) --
+     AP_Float                _thr_mix_man;       // throttle vs attitude control prioritisation used when using manual throttle (higher values mean we prioritise attitude control over throttle)
++
++    // ---- Pusher (X-axis propulsion) torque feed-forward compensation ----
++    // Cancels the disturbance moments produced by a body +X pusher prop:
++    //   pitch  : thrust line vertical offset from CG  (the term that crashed 00000170.BIN)
++    //   roll   : pusher motor reaction torque         (sigma * Q_p)
++    //   yaw    : thrust line Y offset from CG         (-h * T_p)
++    // All gains default to 0 -> identical to stock until calibrated.
++    AP_Int8                 _push_en;           // enable pusher compensation
++    AP_Int8                 _push_rc;           // RC input channel driving the pusher (1..16)
++    AP_Float                _push_pit;          // pitch feed-forward gain (normalised per pusher_norm^2)
++    AP_Float                _push_rll;          // roll  feed-forward gain
++    AP_Float                _push_yaw;          // yaw   feed-forward gain
+diff --git a/libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.cpp b/libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.cpp
+index 3333333..4444444 100644
+--- a/libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.cpp
++++ b/libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.cpp
+@@ -- Add include near the top with the other includes --
+ #include "AC_AttitudeControl_Multi.h"
+ #include <AP_HAL/AP_HAL.h>
+ #include <AP_Math/AP_Math.h>
++#include <RC_Channel/RC_Channel.h>     // pusher feed-forward reads the pusher RC channel
+@@ -- In AC_AttitudeControl_Multi::var_info[], insert before the final AP_GROUPEND --
+     AP_GROUPINFO("THR_MIX_MAN", 6, AC_AttitudeControl_Multi, _thr_mix_man, AC_ATTITUDE_CONTROL_MAN_DEFAULT),
++
++    // @Param: PUSH_EN
++    // @DisplayName: Pusher torque compensation enable
++    // @Description: Enable feed-forward compensation of an X-axis pusher propeller's disturbance moments.
++    // @Values: 0:Disabled,1:Enabled
++    // @User: Advanced
++    AP_GROUPINFO("PUSH_EN", 30, AC_AttitudeControl_Multi, _push_en, 0),
++
++    // @Param: PUSH_RC
++    // @DisplayName: Pusher RC input channel
++    // @Description: RC input channel (1..16) that drives the pusher throttle slider.
++    // @Range: 1 16
++    // @User: Advanced
++    AP_GROUPINFO("PUSH_RC", 31, AC_AttitudeControl_Multi, _push_rc, 8),
++
++    // @Param: PUSH_PIT
++    // @DisplayName: Pusher pitch feed-forward gain
++    // @Description: Normalised pitch moment added to the main rotors per (pusher_norm^2). Positive commands nose-UP. Tune so steady-state pitch error stays ~0 as pusher rises. This is the term that prevents the nose-down runaway.
++    // @Range: -0.5 0.5
++    // @Increment: 0.005
++    // @User: Advanced
++    AP_GROUPINFO("PUSH_PIT", 32, AC_AttitudeControl_Multi, _push_pit, 0.0f),
++
++    // @Param: PUSH_RLL
++    // @DisplayName: Pusher roll feed-forward gain
++    // @Description: Normalised roll moment added per (pusher_norm^2) to cancel pusher motor reaction torque.
++    // @Range: -0.5 0.5
++    // @Increment: 0.005
++    // @User: Advanced
++    AP_GROUPINFO("PUSH_RLL", 33, AC_AttitudeControl_Multi, _push_rll, 0.0f),
++
++    // @Param: PUSH_YAW
++    // @DisplayName: Pusher yaw feed-forward gain
++    // @Description: Normalised yaw moment added per (pusher_norm^2) to cancel the yaw moment from a Y-offset pusher thrust line.
++    // @Range: -0.5 0.5
++    // @Increment: 0.005
++    // @User: Advanced
++    AP_GROUPINFO("PUSH_YAW", 34, AC_AttitudeControl_Multi, _push_yaw, 0.0f),
++
+     AP_GROUPEND
+ };
+@@ -- At the END of AC_AttitudeControl_Multi::rate_controller_run(), insert just before control_monitor_update(); --
+     _motors.set_yaw_ff(get_rate_yaw_pid().get_ff() * _feedforward_scalar);
+
++    // ====================================================================
++    // Pusher (X-axis propulsion) torque feed-forward compensation
++    // ====================================================================
++    // A body +X pusher prop produces, per the torque model:
++    //     F_p   = [T_p, 0, 0]                       (forward thrust)
++    //     tau_p = [ sigma*Q_p , z_p*T_p , -h*T_p ]  (roll, pitch, yaw)
++    // where T_p, Q_p ~ Omega^2 ~ (pusher command)^2.
++    // The main rotors must generate tau_main = tau_des - tau_p, i.e. ADD
++    // -tau_p as feed-forward so the disturbance is cancelled BEFORE an
++    // attitude error develops (instead of the rate loop reacting late and
++    // saturating, as it did in crash 00000170.BIN).
++    // Gains fold in all unknown constants (z_p, h, sigma, kT, kQ) and are
++    // calibrated empirically. Sign is chosen by the user during bring-up.
++    if (_push_en) {
++        float pusher_norm = 0.0f;
++        if (rc().has_valid_input()) {
++            const RC_Channel *pch = rc().channel(constrain_int16(_push_rc, 1, 16) - 1);
++            if (pch != nullptr) {
++                // norm_input_ignore_trim() -> -1..+1 over [min,max]; map idle(min)->0, full(max)->1
++                pusher_norm = (pch->norm_input_ignore_trim() + 1.0f) * 0.5f;
++            }
++        }
++        pusher_norm = constrain_float(pusher_norm, 0.0f, 1.0f);
++        const float p2 = pusher_norm * pusher_norm;     // thrust/torque ~ command^2
++
++        _motors.set_roll (_motors.get_roll()  + _push_rll * p2);
++        _motors.set_pitch(_motors.get_pitch() + _push_pit * p2);
++        _motors.set_yaw  (_motors.get_yaw()   + _push_yaw * p2);
++    }
++
+     _sysid_ang_vel_body.zero();
+     _actuator_sysid.zero();
+
+     control_monitor_update();
+ }
